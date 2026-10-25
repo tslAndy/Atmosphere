@@ -35,10 +35,11 @@ Shader "Unlit/NewUnlitShader"
             float4 _MainTex_ST;
 
             // CUSTOM PARAMS
-            float4x4 _invMatrix;
+            float4x4  _invMatrix;
+            sampler2D _lutTexture;
            
             float3 _sunDir;
-            float _sunLight;
+            float  _sunLight;
 
             float3 _planetPos;
             float _innerRadius, _outerRadius;
@@ -50,10 +51,10 @@ Shader "Unlit/NewUnlitShader"
             float  _baseWaveLen;
            
             float _stepSize;
+            int   _maxSteps;
 
             #define PI          3.1415926535
             #define EPS         0.005
-            #define MAX_STEPS   200
 
             float lengthSqr(float3 vec) { return dot(vec, vec); }
             float sqr(float t) { return t*t; }
@@ -112,31 +113,16 @@ Shader "Unlit/NewUnlitShader"
                 return 3.0 / (16.0 * PI) * (1.0 + cosSqr); 
             }
 
-            float3 trace(
-                float3 rayOrigin, float3 rayDir,
-                float3 coeffs)
+            float3 trace(float3 rayOrigin, float3 rayDir)
             {
-                float3 transmittance = 1.0;
-                for (int i = 0; i < MAX_STEPS; i++)
-                {
-                    // hit planet 
-                    if (lengthSqr(rayOrigin - _planetPos) < sqr(_innerRadius))
-                        return 0.0;
+                float3 delta = rayOrigin - _planetPos;
+                float  deltaLen = length(delta);
+                float3 deltaNorm = delta / deltaLen;
 
-                    // if lost almost all transmittance 
-                    if (all(transmittance < EPS))
-                        break;
+                float cos01 = 0.5 * dot(deltaNorm, _sunDir) + 0.5;
+                float rad01 = (deltaLen - _innerRadius) / (_outerRadius - _innerRadius);
 
-                    // if not inside of atmosphere
-                    if (!isInsideOfAtmosphere(rayOrigin))
-                        break;
-
-                    float density = sampleDensity(rayOrigin + 0.5 * _stepSize * _sunDir);
-                    transmittance *= exp(-_stepSize * density * coeffs);
-                    rayOrigin += _stepSize * _sunDir;
-                }
-
-                return transmittance * _sunLight;
+                return tex2D(_lutTexture, float2(cos01, rad01));
             }
 
             v2f vert(appdata v)
@@ -165,7 +151,10 @@ Shader "Unlit/NewUnlitShader"
                 float3 transmittance = 1.0;
                 float3 accum = 0.0;
 
-                for (int i = 0; i < MAX_STEPS; i++)
+                float3 halfStep = 0.5 * _stepSize * rayDir;
+
+                [loop]
+                for (int i = 0; i < _maxSteps; i++)
                 {
                     // depth buffer value is less 
                     if (t >= maxDepth)
@@ -179,9 +168,9 @@ Shader "Unlit/NewUnlitShader"
                     if (!isInsideOfAtmosphere(rayOrigin))
                         break;
 
-                    float density = sampleDensity(rayOrigin + 0.5 * _stepSize * rayDir);
+                    float density = sampleDensity(rayOrigin + halfStep);
                     transmittance *= exp(-_stepSize * density * coeffs);
-                    accum += density * transmittance * trace(rayOrigin, rayDir, coeffs);
+                    accum += density * transmittance * trace(rayOrigin, rayDir);
 
                     rayOrigin += _stepSize * rayDir;
                     t += _stepSize;

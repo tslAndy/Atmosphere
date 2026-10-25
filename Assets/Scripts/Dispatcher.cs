@@ -22,35 +22,78 @@ public class Dispatcher : MonoBehaviour
 
     [Header("Performance params")]
     public float stepSize;
+    public int maxSteps;
+
+    [Header("LUT params")]
+    [Tooltip("X - angle division, Y - radius division")]
+    public Vector2Int lutResolution;
 
     [Header("Components")]
     public Camera cam;
-    public Material mat;
+    public Material atmoMat;
+    public Material lutMat;
+
+    private RenderTexture lutTexture;
 
     void Start()
     {
-        cam.depthTextureMode = DepthTextureMode.Depth;
+        InitLUT();
+        InitAtmo();
+    }
+
+    void InitLUT()
+    {
+        lutTexture = new RenderTexture(lutResolution.x, lutResolution.y, 0)
+        {
+            enableRandomWrite = true,
+        };
+        lutTexture.Create();
+
+        lutMat.SetVector("_sunDir", sunDir.normalized);
+        lutMat.SetFloat("_sunLight", sunLight);
+
+        lutMat.SetFloat("_innerRadius", innerRadius);
+        lutMat.SetFloat("_outerRadius", outerRadius);
+
+        lutMat.SetFloat("_baseDensity", baseDensity);
+        lutMat.SetFloat("_densityFalloff", densityFalloff);
+
+        lutMat.SetVector("_waveLens", waveLens);
+        lutMat.SetFloat("_baseWaveLen", baseWaveLen);
+
+        lutMat.SetFloat("_stepSize", stepSize);
+        lutMat.SetFloat("_maxSteps", maxSteps);
+
+        Graphics.Blit(null, lutTexture, lutMat);
     }
 
     void Update()
     {
         Matrix4x4 invMatrix = GetInvMatrix();
-        mat.SetMatrix("_invMatrix", invMatrix);
+        atmoMat.SetMatrix("_invMatrix", invMatrix);
+    }
 
-        mat.SetVector("_sunDir", sunDir.normalized);
-        mat.SetFloat("_sunLight", sunLight);
+    void InitAtmo()
+    {
+        cam.depthTextureMode = DepthTextureMode.Depth;
 
-        mat.SetVector("_planetPos", planetPos);
-        mat.SetFloat("_innerRadius", innerRadius);
-        mat.SetFloat("_outerRadius", outerRadius);
+        atmoMat.SetVector("_sunDir", sunDir.normalized);
+        atmoMat.SetFloat("_sunLight", sunLight);
 
-        mat.SetFloat("_baseDensity", baseDensity);
-        mat.SetFloat("_densityFalloff", densityFalloff);
+        atmoMat.SetVector("_planetPos", planetPos);
+        atmoMat.SetFloat("_innerRadius", innerRadius);
+        atmoMat.SetFloat("_outerRadius", outerRadius);
 
-        mat.SetVector("_waveLens", waveLens);
-        mat.SetFloat("_baseWaveLen", baseWaveLen);
+        atmoMat.SetFloat("_baseDensity", baseDensity);
+        atmoMat.SetFloat("_densityFalloff", densityFalloff);
 
-        mat.SetFloat("_stepSize", stepSize);
+        atmoMat.SetVector("_waveLens", waveLens);
+        atmoMat.SetFloat("_baseWaveLen", baseWaveLen);
+
+        atmoMat.SetFloat("_stepSize", stepSize);
+        atmoMat.SetFloat("_maxSteps", maxSteps);
+
+        atmoMat.SetTexture("_lutTexture", lutTexture);
     }
 
     Matrix4x4 GetInvMatrix()
@@ -78,11 +121,12 @@ public class Dispatcher : MonoBehaviour
 
     void OnRenderImage(RenderTexture source, RenderTexture dest)
     {
-        Graphics.Blit(source, dest, mat);
+        Graphics.Blit(source, dest, atmoMat);
     }
 
     void OnDrawGizmos()
     {
+        Gizmos.DrawLine(planetPos, planetPos + sunDir * 10);
         Gizmos.DrawWireSphere(planetPos, innerRadius);
         Gizmos.DrawWireSphere(planetPos, outerRadius);
     }
